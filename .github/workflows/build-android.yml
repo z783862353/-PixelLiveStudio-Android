@@ -1,0 +1,73 @@
+name: Build Pixel Live Studio Android APK
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-apk:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Install Android SDK packages
+        run: sdkmanager --install "platforms;android-36" "build-tools;36.0.0" "platform-tools"
+
+      - name: Set up Gradle 8.13
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '8.13'
+
+      - name: Build debug APK
+        run: gradle --no-daemon clean assembleDebug
+
+      - name: Prepare directly downloadable APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp app/build/outputs/apk/debug/app-debug.apk dist/PixelLiveStudio.apk
+          test -s dist/PixelLiveStudio.apk
+          unzip -t dist/PixelLiveStudio.apk >/dev/null
+          ls -lh dist/PixelLiveStudio.apk
+
+      - name: Upload APK artifact (backup download)
+        uses: actions/upload-artifact@v7
+        with:
+          name: PixelLiveStudio-Android-APK
+          path: dist/PixelLiveStudio.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish APK to GitHub Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android-v1.0.${{ github.run_number }}
+          name: Pixel Live Studio Android v1.0.${{ github.run_number }}
+          body: |
+            Pixel Live Studio Android debug APK.
+
+            Install the attached PixelLiveStudio.apk on an Android device.
+            This is an MVP. Verify Motion Photo playback in the phone gallery and Douyin upload behavior on the target device/app version.
+          files: dist/PixelLiveStudio.apk
+          fail_on_unmatched_files: true
+          make_latest: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
